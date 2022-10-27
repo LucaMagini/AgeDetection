@@ -1,0 +1,7 @@
+{
+  "host": "0.0.0.0",
+  "port": 8080,
+  "weights_path": "../Models/resnet50_weights.h5",
+  "input_shape": [ 224, 224, 3 ],
+  "num_classes": 8
+}
