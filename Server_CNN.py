@@ -1,14 +1,10 @@
 import flask, json, os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2' #INFO and WARNING messages are not printed (put it before importing tf)
-import tensorflow as tf
-import keras
-from keras.models import Model
-from tensorflow.keras.layers import Dense, Flatten, Dropout
-from tensorflow.keras.applications.resnet50 import ResNet50
+from flask import request, jsonify
+from Utilities import creating_model, loading_weights, load_image, get_prediction
 from gevent.pywsgi import WSGIServer
 from wsgidav import __version__ 
 
-tf.get_logger().setLevel('ERROR')
 
 app = flask.Flask(__name__)
 app.config['DEBUG'] = True
@@ -19,33 +15,52 @@ with open('config.json') as json_file:
 
 ip_address = data['host']
 port = data['port']
-num_classes = data['num_classes']
-input_shape = tuple(data['input_shape'])
+weights_path = data['weights_path']
 
+model = creating_model()
+model = loading_weights(model, weights_path)
 
-def creating_model():
-    #Importing the ResNet-50 pre-trained model
-    ResNet50_model = ResNet50(include_top=False, input_shape=input_shape, classes=num_classes)
-    
-    for layers in ResNet50_model.layers:
-        layers.trainable=False
+@app.route('/')
+def home():
+    "Check Server Operation"
+    try:
+        result = {
+                    'Result':"OK",
+                    'Data':"Server Ready"
+                 }
+            
+    except:
+        result = {
+                    'Result':"NOT OK",
+                    'Data':"Server Not Ready"
+                 }
+            
         
-    #Defining the final layers of the model
-    resnet50 = Flatten()(ResNet50_model.output)
-    resnet50 = Dropout(0.5)(resnet50)
-    resnet50 = Dense(512,activation='relu')(resnet50)
-    resnet50 = Dropout(0.2)(resnet50)
-    resnet50 = Dense(128,activation='relu')(resnet50)
-    resnet50 = Dropout(0.2)(resnet50)
-    resnet50 = Dense(32,activation='relu')(resnet50)
-    resnet50 = Dropout(0.5)(resnet50)
-    resnet50 = Dense(8,activation='softmax')(resnet50)
-    resnet50_final_model = Model(inputs=ResNet50_model.input, outputs=resnet50)
+    response = jsonify(result)
+    response.headers.set('Content-Type', 'application/json')
     
-    #Compiling the model
-    resnet50_final_model.compile(loss='sparse_categorical_crossentropy', 
-                                 optimizer=keras.optimizers.Adam(learning_rate=0.0001), 
-                                 metrics=['sparse_categorical_accuracy'])    
+    return response 
+
+@app.route('/api/v1/age_detection/get_prediction', methods=['POST']) 
+def api_get_prediction():
+    """Get prediction given an image"""
+    
+    img_path = request.json.get('img_path')
+    img = load_image(img_path)
+    
+    pred = get_prediction(model, img)
+    
+    result = {
+                  'Result':'OK',
+                  'Prediction': int(pred)
+              }
+
+    response = jsonify(result)
+    response.headers.set('Content-Type', 'application/json')
+    
+    return response
+
+
 
 def start_app():
     http_server = WSGIServer((ip_address, port), app, log=app.logger)
